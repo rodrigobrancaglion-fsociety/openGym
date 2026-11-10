@@ -1,0 +1,39 @@
+name: Deploy to Oracle VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Permite disparar o deploy manualmente pela aba Actions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy application via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            # 1. Garante que o diretório de deploy existe
+            mkdir -p ~/opengym
+            cd ~/opengym
+
+            # 2. Clona na primeira vez ou atualiza se já existir
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/${{ github.repository }}.git .
+            else
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+
+            # 3. Exporta o token do Cloudflare para o ambiente de execução
+            export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
+
+            # 4. Reconstrói as imagens e sobe os containers em segundo plano
+            docker compose down --remove-orphans || true
+            docker compose up -d --build
