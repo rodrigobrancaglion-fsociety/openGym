@@ -4,7 +4,10 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Permite disparar o deploy manualmente pela aba Actions
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab with one click
+  schedule:
+    # Runs automatically every Sunday at 03:00 UTC to check for upstream image updates
+    - cron: '0 3 * * 0'
 
 jobs:
   deploy:
@@ -19,22 +22,16 @@ jobs:
           script: |
             set -e
 
-            # 1. Garante que o diretório de deploy existe
-            mkdir -p ~/opengym
             cd ~/opengym
 
-            # 1. Sincroniza o docker-compose.yml atualizado
-            git fetch origin main
-            git reset --hard origin/main
-
-            # 2. Injeta a variável do Cloudflare Tunnel
+            # 1. Export Cloudflare Tunnel token if required
             export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
 
-            # 3. Baixa as imagens oficiais mais recentes do registro GHCR
+            # 2. Pull the latest official pre-built images from GHCR
             docker compose pull
 
-            # 4. Recria e sobe os containers em segundo plano
+            # 3. Recreate only containers with updated images
             docker compose up -d
 
-            # 5. Remove imagens antigas não utilizadas para poupar disco
+            # 4. Remove unused dangling images to free up disk space on the VPS
             docker image prune -f
