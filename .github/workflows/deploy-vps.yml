@@ -1,0 +1,37 @@
+name: Deploy OpenGym to Oracle VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab with one click
+  schedule:
+    # Runs automatically every Sunday at 03:00 UTC to check for upstream image updates
+    - cron: '0 3 * * 0'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            cd ~/opengym
+
+            # 1. Export Cloudflare Tunnel token if required
+            export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
+
+            # 2. Pull the latest official pre-built images from GHCR
+            docker compose pull
+
+            # 3. Recreate only containers with updated images
+            docker compose up -d
+
+            # 4. Remove unused dangling images to free up disk space on the VPS
+            docker image prune -f
