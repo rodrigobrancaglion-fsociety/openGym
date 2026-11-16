@@ -70,3 +70,17 @@ services:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
     depends_on:
       - web
+
+  # Ponte de Webhook do openGym para o Intervals.icu
+  opengym-bridge:
+    build: ./opengym-bridge
+    container_name: opengym-bridge
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - INTERVALS_ATHLETE_ID=${INTERVALS_ATHLETE_ID}
+      - INTERVALS_API_KEY=${INTERVALS_API_KEY}
+      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
+      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
+      - STRAVA_REFRESH_TOKEN=${STRAVA_REFRESH_TOKEN}
