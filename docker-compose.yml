@@ -4,7 +4,10 @@ services:
   # Passkey auth + per-user data (Node, no framework).
   # image: prebuilt (docker compose pull). build: from source (docker compose up --build).
   api:
-    image: ghcr.io/duartesantos8/opengym-api:latest
+    # image: ghcr.io/duartesantos8/opengym-api:latest
+    build:
+      context: ./api
+      target: ${API_TARGET:-default}
     # Default target: no AI runtime, no AI dependency — the image every instance has always had.
     # To opt into the AI Coach, build the other target instead:
     #     API_TARGET=coach docker compose up --build api
@@ -71,16 +74,17 @@ services:
     depends_on:
       - web
 
+
   # Ponte de Webhook do openGym para o Intervals.icu
-  opengym-bridge:
-    build: ./opengym-bridge
-    container_name: opengym-bridge
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      - INTERVALS_ATHLETE_ID=${INTERVALS_ATHLETE_ID}
-      - INTERVALS_API_KEY=${INTERVALS_API_KEY}
-      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
-      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
-      - STRAVA_REFRESH_TOKEN=${STRAVA_REFRESH_TOKEN}
+#  opengym-bridge:
+#    build: ./opengym-bridge
+#    container_name: opengym-bridge
+#    restart: unless-stopped
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      - INTERVALS_ATHLETE_ID=${INTERVALS_ATHLETE_ID}
+#      - INTERVALS_API_KEY=${INTERVALS_API_KEY}
+#      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
+#      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
+#      - STRAVA_REFRESH_TOKEN=${STRAVA_REFRESH_TOKEN}
