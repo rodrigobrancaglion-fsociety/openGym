@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
   workflow_dispatch: # Allows manual trigger from the GitHub Actions tab with one click
   schedule:
     # Runs automatically every Sunday at 03:00 UTC to check for upstream image updates
@@ -13,6 +14,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout custom repository code
+        uses: actions/checkout@v4
+
+      - name: Copy custom api folder to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "api/"
+          target: "~/opengym"
+          overwrite: true
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -27,11 +41,11 @@ jobs:
             # 1. Export Cloudflare Tunnel token if required
             export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
 
-            # 2. Pull the latest official pre-built images from GHCR
-            docker compose pull
+            # 2. Pull pre-built images for services using `image:` (web, tunnel, or api if reverted to upstream)
+            docker compose pull --ignore-buildable
 
-            # 3. Recreate only containers with updated images
-            docker compose up -d
+            # 3. Build custom services (if `build:` is active) and recreate updated containers
+            docker compose up -d --build
 
             # 4. Remove unused dangling images to free up disk space on the VPS
             docker image prune -f
