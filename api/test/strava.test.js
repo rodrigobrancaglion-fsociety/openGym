@@ -125,10 +125,52 @@ test('a workout as an activity: cardio as what it was, strength only when asked'
   const lift = activityFor(workoutPayload(lifting, doc), { strength: true });
   assert.equal(lift.sport_type, 'WeightTraining');
   assert.equal(lift.elapsed_time, 60 * 60);
-  assert.match(lift.description, /60 kg × 8, 60 kg × 7/);
-  assert.ok(!/20 kg × 10/.test(lift.description), 'warm-ups left out');
-  assert.match(lift.description, /PRs: /);
+  assert.match(lift.description, /Set 1: 60 kg x 8\nSet 2: 60 kg x 7/);
+  assert.ok(!/20 kg x 10/.test(lift.description), 'warm-ups left out');
+  assert.match(lift.description, /^🥇 1 Record\n1 Exercise, 2 Sets, 900 kg lifted/);
   assert.equal(lift.distance, undefined);
+  const formatted = activityFor({
+    unit: 'kg', durationMin: 60, totals: { volume: 4320, sets: 17 },
+    records: ['a', 'b', 'c', 'd', 'e'].map(name => ({ name })),
+    exercises: [
+      { name: 'cable lat pulldown full range of motion', sets: Array(4).fill({ weight: 20, reps: 10 }) },
+      { name: 'barbell bent over row', sets: Array(4).fill({ weight: 80, reps: 8 }) },
+      { name: 'cable rope seated row', sets: Array(3).fill({ weight: 15, reps: 10 }) },
+      { name: 'barbell curl', sets: Array(3).fill({ weight: 5, reps: 10 }) },
+      { name: 'dumbbell hammer curl', sets: Array(3).fill({ weight: 10, reps: 12 }) },
+    ],
+  }, { strength: true });
+  assert.equal(formatted.description, `🥇 5 Records
+5 Exercises, 17 Sets, 4 320 kg lifted
+
+Cable Lat Pulldown Full Range of Motion
+Set 1: 20 kg x 10
+Set 2: 20 kg x 10
+Set 3: 20 kg x 10
+Set 4: 20 kg x 10
+
+Barbell Bent Over Row
+Set 1: 80 kg x 8
+Set 2: 80 kg x 8
+Set 3: 80 kg x 8
+Set 4: 80 kg x 8
+
+Cable Rope Seated Row
+Set 1: 15 kg x 10
+Set 2: 15 kg x 10
+Set 3: 15 kg x 10
+
+Barbell Curl
+Set 1: 5 kg x 10
+Set 2: 5 kg x 10
+Set 3: 5 kg x 10
+
+Dumbbell Hammer Curl
+Set 1: 10 kg x 12
+Set 2: 10 kg x 12
+Set 3: 10 kg x 12
+
+Logged with openGym`);
   assert.deepEqual(sportOf('Rowing machine'), { sport: 'Rowing', trainer: true });
   assert.deepEqual(sportOf('Outdoor running'), { sport: 'Run', trainer: false });
   assert.deepEqual(sportOf('Stationary bike'), { sport: 'Ride', trainer: true });
