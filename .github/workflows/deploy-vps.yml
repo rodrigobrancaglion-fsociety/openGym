@@ -17,13 +17,13 @@ jobs:
       - name: Checkout custom repository code
         uses: actions/checkout@v4
 
-      - name: Copy custom api folder to VPS
+      - name: Copy custom api folder and compose file to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "api/"
+          source: "api/,docker-compose.yml"
           target: "~/opengym"
           overwrite: true
 
