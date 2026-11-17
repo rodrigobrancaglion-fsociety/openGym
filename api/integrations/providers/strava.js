@@ -28,6 +28,7 @@ const TIMEOUT_MS = 15_000;
 const RATE = { capacity: 60, refillMs: 15_000 };
 const CONN_RATE = { capacity: 10, refillMs: 60_000 };
 const DESC_MAX = 3500;
+const SMALL_TITLE_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'up', 'via']);
 
 // What a cardio exercise is on Strava, by its name. The first that matches wins.
 const SPORTS = [
@@ -47,6 +48,14 @@ const isCardioSet = s => s && !s.sides && Number(s.minutes) > 0 && !(Number(s.re
 const cardioOf = ex => (ex.sets || []).filter(isCardioSet);
 
 const fmt = n => String(Math.round(n * 100) / 100);
+function titleCase(s) {
+  let first = true;
+  return String(s || '').toLocaleLowerCase('en-US').replace(/\b[a-z][a-z']*/g, word => {
+    const out = !first && SMALL_TITLE_WORDS.has(word) ? word : word[0].toLocaleUpperCase('en-US') + word.slice(1);
+    first = false;
+    return out;
+  });
+}
 function setText(s, unit) {
   if (s.sides) return `L ${setText(s.sides.left, unit)} / R ${setText(s.sides.right, unit)}`;
   if (isCardioSet(s)) {
@@ -78,22 +87,47 @@ export function activityFor(w, { strength = false } = {}) {
     ? (w.durationMin > 0 ? w.durationMin * 60 : Math.max(60, Math.round(cardioMin * 60)))
     : Math.round(cardioMin * 60);
   const unit = w.unit === 'lb' ? ' lb' : ' kg';
-  const lines = [];
-  for (const e of asStrength ? exercises : cardio) {
-    const sets = (e.sets || []).filter(s => !s.warmup && (asStrength || isCardioSet(s)));
-    if (sets.length) lines.push(`${e.name}: ${sets.map(s => setText(s, unit)).join(', ')}`);
+  let description;
+  if (asStrength) {
+    const blocks = [];
+    let setCount = 0;
+    for (const e of exercises) {
+      const sets = (e.sets || []).filter(s => !s.warmup);
+      if (!sets.length) continue;
+      setCount += sets.length;
+      blocks.push(`${titleCase(e.name)}\n${sets.map((s, i) => `Set ${i + 1}: ${setText(s, unit).replace(/×/g, 'x')}`).join('\n')}`);
+    }
+    const recordCount = Array.isArray(w.records) ? w.records.length : 0;
+    const volume = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
+      .format(Number(w.totals?.volume) || 0).replace(/,/g, ' ');
+    const exerciseLabel = blocks.length === 1 ? 'Exercise' : 'Exercises';
+    const setLabel = setCount === 1 ? 'Set' : 'Sets';
+    const heading = [
+      recordCount ? `🥇 ${recordCount} ${recordCount === 1 ? 'Record' : 'Records'}` : null,
+      `${blocks.length} ${exerciseLabel}, ${setCount} ${setLabel}, ${volume}${unit} lifted`,
+    ].filter(Boolean).join('\n');
+    const sections = [heading, ...blocks];
+    if (w.note) sections.push(w.note);
+    sections.push('Logged with openGym');
+    description = sections.join('\n\n').slice(0, DESC_MAX);
+  } else {
+    const lines = [];
+    for (const e of cardio) {
+      const sets = (e.sets || []).filter(s => !s.warmup && isCardioSet(s));
+      if (sets.length) lines.push(`${e.name}: ${sets.map(s => setText(s, unit)).join(', ')}`);
+    }
+    if (Array.isArray(w.records) && w.records.length) lines.push(`PRs: ${w.records.map(r => r.name).join(', ')}`);
+    if (w.note) lines.push('', w.note);
+    lines.push('', 'Logged with openGym');
+    description = lines.join('\n').slice(0, DESC_MAX);
   }
-  if (asStrength && w.totals?.volume) lines.push('', `Volume ${fmt(w.totals.volume)}${unit}, ${w.totals.sets} sets`);
-  if (Array.isArray(w.records) && w.records.length) lines.push(`PRs: ${w.records.map(r => r.name).join(', ')}`);
-  if (w.note) lines.push('', w.note);
-  lines.push('', 'Logged with openGym');
   const name = (w.name || (asStrength ? 'Strength training' : main?.name) || 'Workout').slice(0, 120);
   return {
     name,
     sport_type: sport,
     start_date_local: w.startedAt || (w.date ? w.date + 'T12:00:00Z' : new Date().toISOString()),
     elapsed_time: Math.max(1, Math.round(elapsed)),
-    description: lines.join('\n').slice(0, DESC_MAX),
+    description,
     ...(trainer ? { trainer: 1 } : {}),
     ...(!asStrength && distanceKm > 0 ? { distance: Math.round(distanceKm * 1000) } : {}),
   };
