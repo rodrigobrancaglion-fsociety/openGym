@@ -64,6 +64,13 @@ services:
       # MEDIA_VIDEO_MAX_MB (40 by default), which the api service reads from .env.
       MEDIA_UPLOAD_MAX: ${MEDIA_UPLOAD_MAX:-48m}
 
+  ############################################################################################
+  ###### Custom services for this deployment, not part of the upstream OpenGym project. ######
+  ############################################################################################
+    networks:
+      - default
+      - proxy-net
+
   # Cloudflare Tunnel: roteia gym.rodrigobrancaglion.dev diretamente para o Nginx do OpenGym
   tunnel:
     image: cloudflare/cloudflared:latest
@@ -73,7 +80,9 @@ services:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
     depends_on:
       - web
-
+    networks:
+      - default
+      - proxy-net
 
   # Ponte de Webhook do openGym para o Intervals.icu
 #  opengym-bridge:
@@ -88,3 +97,6 @@ services:
 #      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
 #      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
 #      - STRAVA_REFRESH_TOKEN=${STRAVA_REFRESH_TOKEN}
+#    networks:
+#      - default
+#      - proxy-net
