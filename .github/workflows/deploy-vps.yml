@@ -54,18 +54,18 @@ jobs:
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
         run: |
           ssh -i ~/.ssh/id_vps -p "$VPS_PORT" -o BatchMode=yes "${VPS_USER}@${VPS_HOST}" \
-            "TUNNEL_TOKEN='${TUNNEL_TOKEN}' TARGET_DIR='${TARGET_DIR}' bash -s" <<'EOF'
+            "TUNNEL_TOKEN='${TUNNEL_TOKEN}' bash -s" <<EOF
           set -euo pipefail
-          cd "${TARGET_DIR}"
-
+          cd ${TARGET_DIR}
+          
           export TUNNEL_TOKEN
-
+          
           # Pull pre-built images for services using `image:`
           docker compose -f docker-compose.vps.yml pull --ignore-buildable
-
+          
           # Build custom services and recreate updated containers
           docker compose -f docker-compose.vps.yml up -d --build --remove-orphans
-
+          
           # Remove unused dangling images to free up disk space on the VPS
           docker image prune -f >/dev/null 2>&1 || true
           EOF
