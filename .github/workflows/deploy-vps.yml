@@ -1,51 +1,75 @@
-name: Deploy OpenGym to Oracle VPS
+name: Deploy OpenGym to VPS
 
 on:
   push:
     branches:
       - main
-
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab with one click
+  workflow_dispatch:
   schedule:
     # Runs automatically every Sunday at 03:00 UTC to check for upstream image updates
     - cron: '0 3 * * 0'
 
+concurrency:
+  group: deploy-opengym-vps
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER || secrets.VPS_USERNAME }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      TARGET_DIR: ${{ secrets.VPS_TARGET_DIR || '~/opengym' }}
+
     steps:
-      - name: Checkout custom repository code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Copy custom api folder and compose file to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "api/,docker-compose.yml"
-          target: "~/opengym"
-          overwrite: true
+      - name: Setup SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_vps
+          chmod 600 ~/.ssh/id_vps
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
+      - name: Upload application files to VPS
+        run: |
+          tar -czf - \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.idea' \
+            --exclude='.agents' \
+            --exclude='tmp' \
+            api docker-compose.vps.yml | ssh -i ~/.ssh/id_vps -p "$VPS_PORT" -o BatchMode=yes "${VPS_USER}@${VPS_HOST}" \
+              "set -euo pipefail; mkdir -p ${TARGET_DIR}; tar -xzf - -C ${TARGET_DIR}"
 
-            cd ~/opengym
+      - name: Deploy Docker Compose on VPS
+        env:
+          TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
+        run: |
+          ssh -i ~/.ssh/id_vps -p "$VPS_PORT" -o BatchMode=yes "${VPS_USER}@${VPS_HOST}" \
+            "TUNNEL_TOKEN='${TUNNEL_TOKEN}' TARGET_DIR='${TARGET_DIR}' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "${TARGET_DIR}"
 
-            # 1. Export Cloudflare Tunnel token if required
-            export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
+          export TUNNEL_TOKEN
 
-            # 2. Pull pre-built images for services using `image:` (web, tunnel, or api if reverted to upstream)
-            docker compose pull --ignore-buildable
+          # Pull pre-built images for services using `image:`
+          docker compose -f docker-compose.vps.yml pull --ignore-buildable
 
-            # 3. Build custom services (if `build:` is active) and recreate updated containers
-            docker compose up -d --build
+          # Build custom services and recreate updated containers
+          docker compose -f docker-compose.vps.yml up -d --build --remove-orphans
 
-            # 4. Remove unused dangling images to free up disk space on the VPS
-            docker image prune -f
+          # Remove unused dangling images to free up disk space on the VPS
+          docker image prune -f >/dev/null 2>&1 || true
+          EOF
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_vps
