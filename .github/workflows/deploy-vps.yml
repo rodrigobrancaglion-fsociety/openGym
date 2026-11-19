@@ -23,7 +23,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "api/,docker-compose.yml"
+          source: "api/,docker-compose.vps.yml"
           target: "~/opengym"
           overwrite: true
 
@@ -42,10 +42,10 @@ jobs:
             export TUNNEL_TOKEN="${{ secrets.TUNNEL_TOKEN }}"
 
             # 2. Pull pre-built images for services using `image:` (web, tunnel, or api if reverted to upstream)
-            docker compose pull --ignore-buildable
+            docker compose -f docker-compose.vps.yml pull --ignore-buildable
 
             # 3. Build custom services (if `build:` is active) and recreate updated containers
-            docker compose up -d --build
+            docker compose -f docker-compose.vps.yml up -d --build
 
             # 4. Remove unused dangling images to free up disk space on the VPS
             docker image prune -f
