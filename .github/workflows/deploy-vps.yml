@@ -13,20 +13,24 @@ concurrency:
   group: deploy-opengym-vps
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_USER: ${{ secrets.VPS_USER || secrets.VPS_USERNAME }}
+      VPS_USER: ${{ secrets.VPS_USER }}
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-      TARGET_DIR: ${{ secrets.VPS_TARGET_DIR || '~/opengym' }}
+      TARGET_DIR: '~/opengym'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup SSH key
+      - name: Setup SSH
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
@@ -35,40 +39,21 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_vps
           chmod 600 ~/.ssh/id_vps
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          printf 'Host vps\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/id_vps\n  BatchMode yes\n  StrictHostKeyChecking yes\n' \
+            "$VPS_HOST" "$VPS_USER" "$VPS_PORT" > ~/.ssh/config
 
       - name: Upload application files to VPS
         run: |
           tar -czf - \
-            --exclude='.git' \
-            --exclude='.github' \
             --exclude='.env' \
             --exclude='.env.*' \
             --exclude='.idea' \
             --exclude='.agents' \
             --exclude='tmp' \
-            api docker-compose.vps.yml | ssh -i ~/.ssh/id_vps -p "$VPS_PORT" -o BatchMode=yes "${VPS_USER}@${VPS_HOST}" \
-              "set -euo pipefail; mkdir -p ${TARGET_DIR}; tar -xzf - -C ${TARGET_DIR}"
+            api scripts docker-compose.vps.yml | ssh vps "set -euo pipefail; mkdir -p ${TARGET_DIR}; tar -xzf - -C ${TARGET_DIR}"
 
       - name: Deploy Docker Compose on VPS
-        env:
-          TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
-        run: |
-          ssh -i ~/.ssh/id_vps -p "$VPS_PORT" -o BatchMode=yes "${VPS_USER}@${VPS_HOST}" \
-            "TUNNEL_TOKEN='${TUNNEL_TOKEN}' bash -s" <<EOF
-          set -euo pipefail
-          cd ${TARGET_DIR}
-          
-          export TUNNEL_TOKEN
-          
-          # Pull pre-built images for services using `image:`
-          docker compose -f docker-compose.vps.yml pull --ignore-buildable
-          
-          # Build custom services and recreate updated containers
-          docker compose -f docker-compose.vps.yml up -d --build --remove-orphans
-          
-          # Remove unused dangling images to free up disk space on the VPS
-          docker image prune -f >/dev/null 2>&1 || true
-          EOF
+        run: ssh vps "bash ${TARGET_DIR}/scripts/deploy.sh"
 
       - name: Cleanup SSH key
         if: always()
